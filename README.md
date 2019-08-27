@@ -132,41 +132,57 @@ To run a multi-proof efficiently, one would want to:
 Multi-proof verification based on offsets and a packed bottom-chunks array:
 
 ```
+# TODO: work in progress multi-proof verify code. Make test cases and fix off-by-ones.
+
 chunk_i = 0
-pos = 0
-size_stack = [0] * max_depth
+offset_i = 1
+end_stack = [0] * max_depth
 chunk_stack = [chunk(0)] * max_depth
-stack_i = 0
-for pos < count:
-    if offsets[pos] > 1: # if the sub-tree is not empty, we need to go deeper. (also handles empty proof case)
-        size_stack[stack_i] = offsets[pos]
+stack_i = 1
+end_stack[0] = offsets[0]
+
+right_chunk = chunk(0)
+
+while chunk_i < count:
+    if offsets[offset_i] > 1: # if the sub-tree is not singular, we need to go deeper. (also handles empty proof case)
+        # left hand size is offsets[offset_i]
+        # chunk_i is at start bottom node of left hand subtree.
         stack_i += 1
-        pos += 1
+        end_stack[stack_i] = chunk_i + offsets[offset_i]  # remember the end of the subtree
+        offset_i += 1
     else:
-        assert offsets[pos] != 0  # no empty offsets, all pairs should have a left-hand.
+        assert offsets[offset_i] != 0  # no empty offsets, all pairs should have a left-hand.
 
         # hit a botom chunk on left hand. Put it into the stack
         chunk_stack[stack_i] = chunks[chunk_i]
 
-
-// TODO: merging
-        merge_chunk = chunk[pos]
+        # move to next chunk, start of next depth-first sub-tree from right hand
         chunk_i += 1
 
-        start_stack_i = stack_i
-        # one branch node on right-hand left to merge? -> merge back up as far as possible
-        for size_stack[stack_i] + 1 == size_stack[stack_i - 1]
-            # when done with a subtree, make the parent get closer to completion.
-            size_stack[stack_i - 1] += size_stack[stack_i] + 1
-            # merge right-hand bottom chunk back up with left-hand from stack
-            merge_chunk = hash(chunk_stack[stack_i] ++ merge_chunk)
-            stack_i -= 1
-        
-        # save merge results if any
-        if start_stack_i != stack_i:
-            chunk_stack[stack_i - 1] = merge_chunk
+        # if we reached the end of the subtree, then merge back up.
+        if end_stack[stack_i] == chunk_i + 1:
+
+            # start of with the right chunk
+            right_chunk = chunks[chunk_i]
+
+            # move to next chunk, start of next depth-first sub-tree of upper right hand (of new stack_i),
+            #  a.k.a. the end of the subtree we want to merge.
+            chunk_i += 1
+
+            for end_stack[stack_i] == chunk_i:
+                # merge right-hand chunk back up with left-hand from stack.
+                right_chunk = hash(chunk_stack[stack_i] ++ right_chunk)
+                stack_i -= 1
+
+                # detect root? -> finished!
+                if stack_i == 0:
+                    return right_chunk
+
+            # save merge results
+            chunk_stack[stack_i] = right_chunk
+
+# offsets should make the stack merge back up to 0 and return from the loop, if they are all valid.
+raise Exception("invalid offsets")
 ```
 
 Stacks are allocated with space for max depth, e.g. `chunk_stack` is 128 chunks for a tree with the lowest node at depth 127. If unknown, use a generous margin.
-
-// TODO: work in progress multi-proof code.

@@ -63,6 +63,9 @@ Opportunities:
 
 #### Tree offsets
 
+TLDR: binary tree lookups (leaves or subtrees) in `O(log(n))` for any tree structure that contains witness data,
+ with efficient encoding and traversal, and easily nested definitions.
+
 ##### Definition
 
 ```
@@ -83,9 +86,30 @@ This would be a `2 / 32` = `6.25%` memory overhead, to both deterministically de
 **`<bottom chunks>`**: The bottom nodes in the tree packed together, each as a 32 byte chunk, from left to right, 
 with witnesses and leaves mixed (there is really no notion of a difference here).
 
+##### Construction
+
+```
+++: concatenation of offsets
+
+i = generalized index in tree
+S = subtree offsets
+C = subtree contents
+P = subtree proof chunks
+C_i = S_{i*2} ++ S_{i*2+1}
+S_i = if i is at bottom:
+        if i % 2 == 0:  (i.e. left hand)
+          1             (padded to offset size)
+        else:
+          ""            (empty)
+      else:
+        size(C_i) ++ C_i
+P_i = P_{i*2} ++ P_{i*2+1}
+```
+
 ##### Lookup
 
-To get the buffer position of a bottom node chunk with a given generalized index, run through the offsets.  
+To get the buffer position of a bottom node chunk with a given generalized index (`g_index`), run through the offsets.
+  
 ```
 inputs: offsets, g_index
 # skip the leading root bit.
@@ -94,7 +118,7 @@ i = 1
 pos = 1
 res = 0
 for i < len(g_index):
-    if g_index[i]:
+    if g_index[i]:   # i.e. bit at i == 1
         skip = offsets[pos]
         res += skip
         pos += skip
@@ -186,3 +210,21 @@ raise Exception("invalid offsets")
 ```
 
 Stacks are allocated with space for max depth, e.g. `chunk_stack` is 128 chunks for a tree with the lowest node at depth 127. If unknown, use a generous margin.
+
+## Buffer merkle proofs in SSZ
+
+Different places require data to be encoded in a form where the tree-hash can be constructed / verified efficiently from a byte buffer:
+- Crosslink data-roots are constructed from flat bytes data, yet have to be a hash-tree-root (and transparent also; run proofs of referenced shard data, that pass through the data root)
+- EEs run merkle proofs on dynamic inputs, which are unstructured byte buffers
+- Misc. throw-away storage places where parsing a structure is not worth it, or constrained by storage limits 
+
+### Solutions
+
+- Flat-hashes: add padding on every level, and pay a price for making the bytes data hash exactly like a typed tree.
+  - Con: padding blows up fast with deeper structure, especially with uneven structures
+- Embedding: make the types suited for buffers. Complex fields are expanded into multiple fields, to have one level of data, making a byte-buffer compatible.
+  - Con: changes the original type.
+- Recursive SSZ: serialize the SSZ data into bytes, deserialize the bytes to take the hash-tree-root of this special byte buffer.
+  - Con: Recursiveness in serialization is scary / too complex
+- Offsets: not optimized for any structure in particular, but general, consistent and cheap
+  - Con: although sparse trees are cheaper than with padding, they are not great. 

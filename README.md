@@ -63,7 +63,7 @@ Opportunities:
 
 #### Tree offsets
 
-TLDR: binary tree lookups (leaves or subtrees) in `O(log(n))` for any tree structure that contains witness data,
+**TLDR**: binary tree lookups (leaves or subtrees) in `O(log(n))` for any tree structure that contains witness data,
  with efficient encoding and traversal, and easily nested definitions.
 
 ##### Definition
@@ -148,12 +148,14 @@ In this case one could not encode the duplicate offsets for each of these transa
 To run a multi-proof efficiently, one would want to:
 
 - Maintain a stack of subtree roots to merge sibling subtree roots with.
-- Navigate the tree efficiently. No stack-frames or memory copies.
+- Navigate the tree efficiently. **No stack-frames or memory copies**.
 - Combine pre-determined hops (static slices within the generalized index bitlist):
  flatten the loop (based on static generalized index size), and sum changes by known consecutive `g_index[i]` bits.
  (This could result in a 100% compile time lookup optimization for static structures!)
 
 Multi-proof verification based on offsets and a packed bottom-chunks array:
+
+_**This is a non-recursive definition for efficiency. It is prettier with recursion.**_
 
 ```
 # TODO: work in progress multi-proof verify code. Make test cases and fix off-by-ones.

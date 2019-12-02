@@ -5,7 +5,7 @@ Issues have been raised about the `BeaconState` "god object": a state so large t
 However, *this is merely typing*: the real state can be represented as a binary tree,
  making each modification and new hash-tree-root cost only `O(log(N))`, and so can ligth-clients keep track of subsets, or partials, of the state.
 
-And then the `BeaconState`, and future phase 1+ parts of the state, are optimized so that the tree does not change by too widely: this is optimal for cached hash-tree-roots and light-client proofs.
+And then the `BeaconState`, and future phase 1+ parts of the state, are optimized so that the tree does not change too widely (lots of elements at the same time): this is optimal for cached hash-tree-roots and light-client proofs.
 
 ## Problem
 

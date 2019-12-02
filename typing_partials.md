@@ -18,6 +18,15 @@ unlike existing SSZ implementations that run hash-tree-root through their typed 
 The typing is then applied by overlaying a view on the backing: views track the backing anchor node, and when a view mutates, its rebinds to the resulting new backing root node.
 This enables you to fork the backing into many different states, and only pay the cost for the modified parts. And this applies to both storage as hashing cost.
 
+Note that this is not new, libraries like [`pyrsistent`](https://pyrsistent.readthedocs.io/en/latest/) already implement this kind of mutable-like interface over immutable tree-based backings.
+The difference here is that **it does not have to be "magic"**: we can implement it ourselves, and bake in good support for:
+- binary trees, with navigation. Your favorite data structure by the end of this read.
+- merkle caching by default, `O(loh(N))` hashing cost, nevermind SSZ performance.
+- types are compatible with partial trees, run things on merkle proofs.
+- ownership of the backing tree, manage and store the tree, 
+ e.g. fork an older state into a new state with a few modifications, with bare minimum cost.
+
+
 ## Tree
 
 ### Structure
@@ -179,4 +188,143 @@ def subtree_fill_to_contents(nodes: List[Node], depth: int) -> Node:
                 subtree_fill_to_contents(nodes[pivot:], depth-1)
             )
 ```
+
+## Views
+
+Now the interesting part: how do we overlay a type on an immutable binary tree and make it behave like any regular mutable object?
+The answer: views!
+
+Views are ephemeral objects that reference a backing node, and provide an interface to *modify their reference, not the backing itself*.
+Some views are simple, others require elaborate type information.
+
+### Type definitions
+
+Meta-programming for type definitions is really nice, but not strictly necessary.
+E.g. a Golang implementation can define a type definition as yet another struct/slice type, and embed it into a view struct to provide the necessary type parameters.
+
+In Python things can be more elegant:
+- a `TypeDef` is is a `type` subclass.
+- Then a `TypeBase` has `TypeDef` as metaclass, and can be subclassed to implement types.
+- A `View` has `TypeBase` as metaclass, and can be subclassed to implement views.
+
+ E.g. `Uint64` is an `int` and `View`, its class is described by a `Uint64Type`,
+  which is a specialized `UintType`/`BasicType`/`TypeBase`. And this `Uint64Type` is a `TypeDef` that can be passed around and required by other composite type definitions to e.g. declare an element type.
+
+#### Interface
+
+Type definitions should provide:
+- `default_node() -> Node`: create the default backing for this type.
+- `view_from_backing(node: Node) -> View`: wrap a backing in a type-specific view. 
+
+And then logically follows: `def default() -> View: return view_from_backing(default_node())`
+
+And then views should provide:
+- `get_backing() -> Node`
+- `set_backing(node: Node)`
+But these can be internal to the view implementation instead of fully exposed.
+
+#### View-hooks
+
+The pass-by-value vs pass-by-reference can be translated to views as well:
+
+A getter of a view (the "superview") returns a new view (the "subview"), with its own subtree-backing:
+- pass-by-value: detached from the superview, not propagating changes
+- pass-by-reference: attached to the superview, it has a `ViewHook` to call to propagate changes.
+
+A `ViewHook` is a lot like a `Link`, but the mutable typed version: `ViewHook = function(v View)`
+So whenever a `View` changes its backing (in `set_backing(node)`), it should call `hook(new_backing)` to make the superview aware of the change of the element.
+This `hook` can simply be created on the `get(key)` call on the superview to map it to a `set(key, v)` call: `lambda v: self.set(key, v)`
+
+To pass by reference, the `view_from_backing` is extended:
+- `view_from_backing(node: Node, hook: ViewHook) -> View`: wrap a backing in a type-specific view, setup to propagate changes to the given `hook`. 
+
+Note however that putting the same view in multiple superviews will not work: the hook only updates one superview.
+Alternatively you compose the hook to call multiple hooks, but at some point it is a better idea to simply work with copies of the view:
+ mutability is nice, but unintended side-effects are not! Mutating a copy of the view (with different/no viewhook) will not affect the original.  
+Not that view-copies are very efficient: all data is in the referenced immutable tree, the view is just a typed pointer.
+Views are ephemeral, so embedding a view in multiple superviews shouldn't be possible.
+
+### View implementations
+
+#### Subtrees
+
+With e.g. a `VectorType` a `Vector` (`VectorView`) can be described.
+Again, in Golang simply embed the `VectorType` information into the `VectorView` instance, in Python `type(VectorView) == VectorType`.
+
+Now one thing that stands out is that a lot of the types are very similar:
+*a sequential series of elements in subtree of some fixed depth*.
+
+Defining a `SubtreeType` and `SubtreeView` to generalize this is useful:
+
+`SubtreeType`:
+ - `depth`: the type is parametrized with a tree-depth.
+
+`SubtreeView`:
+ - `get(i: int) -> View`:
+ ```python
+    elem_type = ...
+    elem_type.view_from_backing(get_backing().getter(to_gindex(i, depth)),
+                      hook=lambda v: self.set(i, v))
+ ```
+ - `set(i: int, v: View)`:
+ ```python
+    setter_link = self.get_backing().setter(to_gindex(i, depth))
+    set_backing(setter_link(v.get_backing()))
+ ```
+
+Now a `VectorType` can simply define `depth` as a function of `length`,
+ and `VectorView` can limit `get` and `set` to `length` bounds in the subtree.
+
+Similarly, a `Container` would be exactly the same, just with `len(fields)` as `length` and `elem_type` mapped to a `field_type`.
+
+`List` could also be implemented on a `SubtreeView`: derive `depth` from `limit`, add `1` for the length mix in, limit `get`/`set` based on `length`, which reads the mix-in node contents (and optionally also checks against the `limit`).
+
+##### `append` and `pop`
+
+`List` is extra interesting since it also uses expansions naturally:
+- `append` expands into the item at element index `length` of the list. (if not already at `limit`)
+- `pop` summarises the item at element index `length - 1` of the list. (if not already empty)
+
+Expansions and summaries here work on zero nodes. 
+Instead of summarising, just setting it to a zero node is also valid if space is not an issue. 
+
+And then do not forget to update the length mixin node of course.
+
+### Basic types and views
+
+Basic types get packed in homogeneously typed subtrees, so the 1 Node = 1 object fails to hold.
+And then there is the problem of a basic object being only represented by raw value (i.e. type information, but no instance specific properties).
+This means that basic views cannot have a `ViewHook`, and will need be sliced out and into a regular root node.
+However, basic types can also still be used as field elements, taking a full node.
+This means that basic types are *an extension* of regular types.
+And basic views provide *extended functionality*.
+
+#### Basic type
+
+Extend the type definition interface with:
+- `byte_length() -> `: get the type size in number of bytes
+- `basic_view_from_backing(base: Root, i: int) -> BasicView`: get a basic view from a root node, and an index that tells you where in this root the element is placed.
+  - return `from_bytes(base[i*byte_length() : (i+1)*byte_length()])` can be the default.
+- `from_bytes(bytez)`: to construct a basic view of just the applicable bytes. 
+
+And now some of the regular type-def functionality can be described in terms of that of the basic type def:
+- `default_node()` will always be `zero_node(0)`
+- `view_from_backing(node, hook)` will ignore the `hook` and require `node` to be a `Root`. Then return `from_bytes(node[0:byte_length()])`.
+
+#### Basic view
+
+Extend the view interface with:
+- `backing_from_base(base: Root, i: int) -> Root`: plug in the basic view into the root at the given position, return the new root.
+  - return `base[:i*byte_length()] + to_bytes() + base[(i+1)*byte_length():]` can be the default.
+- `to_bytes() -> bytes`: encode the basic view as bytes
+
+And implement `View`:
+- `get_backing() -> Node`: return `pad_right(to_bytes(), length=32)`
+- `set_backing(b: Node)`: error, basic views are pass by value only.
+
+#### Future
+
+This pattern can be improved to `HookedView` (mutates superview, backed by node), `BackedView` (pass by value, backed by node), and `BasicView` (pass by value, view is converted back end forth to node).
+ To further rule out errors on compile-time by using more types to express intentions more precisely.
+
 

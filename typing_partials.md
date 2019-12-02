@@ -314,7 +314,7 @@ And now some of the regular type-def functionality can be described in terms of 
 #### Basic view
 
 Extend the view interface with:
-- `backing_from_base(base: Root, i: int) -> Root`: plug in the basic view into the root at the given position, return the new root.
+- `backing_from_base(base: Root, i: int) -> Root`: plug in the basic view contents into the root at the given position, return the new root.
   - return `base[:i*byte_length()] + to_bytes() + base[(i+1)*byte_length():]` can be the default.
 - `to_bytes() -> bytes`: encode the basic view as bytes
 
@@ -322,9 +322,59 @@ And implement `View`:
 - `get_backing() -> Node`: return `pad_right(to_bytes(), length=32)`
 - `set_backing(b: Node)`: error, basic views are pass by value only.
 
+#### Basic vector and basic list
+
+To pack the actual `BasicView`s in lists and vectors, we need a type that is aware of the `basic_view_from_backing` and `backing_from_base`.
+One option is to add extra conditions to the regular `Vector`/`List`, another option is to define `BasicVector` and `BasicList`:
+- `elem_type` must be a `BasicType`
+- `get` and `set` return `BasicView` instead. And use `byte_length()` to get the right root, and then derive the sub-index to slice out the `BasicView` from the backing root.
+
 #### Future
 
 This pattern can be improved to `HookedView` (mutates superview, backed by node), `BackedView` (pass by value, backed by node), and `BasicView` (pass by value, view is converted back end forth to node).
  To further rule out errors on compile-time by using more types to express intentions more precisely.
 
+### Bitvector and Bitlist
+
+These are more difficult, and have rather interesting use-cases:
+- `BitVector[4]` for the justification data fits within a single root just fine. No need to complicate logic.
+- `Bitlist`s used for pending attestations are bigger, but also don't make much sense to partially represent. Caching the root of the bitlist as a whole would be best.
+
+However, for compatibility with loading merkle-proofs from general bytes32 backings, we still need to define how the bitvector and bitlists are loaded from and into trees.
+So here this is one way of representing it as a tree, when necessary:
+- use `SubtreeType`/`SubtreeView`, but for a `depth` derived from `bit_length/256` (Or `limit` and the mix-in for lists, as with regular `List`s).
+- Define a `bit_view_from_backing(base: Root, i: int) -> BoolView` and `backing_from_bitfield_base(base: Root, i: int) -> Root`, similar to basic types, but for 1 bit at a time.
+- `BitVector` and `BitList` are like the basic vectors/lists, but without element-type param (always `BoolType`), and using above methods to interpret and output roots.
+
+## Results
+
+This has been implemented in Go, see [`ztyp`](https://github.com/protolambda/ztyp), although experimental, and more verbose/unpolished as Go does not have meta-programming. But interfaces and embedding get your relatively close.
+And in Python, see [`pymerkles`](https://github.com/protolambda/pymerkles) much less verbose, and nicely put together with meta-programming (metaclasses, not compile time). Work in progress, not complete.
+
+Also, ZRNT has a `tree-state` branch that introduces `ztyp` to represent state, however, error handling verbosity, lack of generics, or any meta-programming at all, makes this transition a big pain.
+Relatively far, but no encoding/decoding on top of tree-state defined yet, and state-transition has not completely migrated yet.
+
+Word of advice here is to:
+- Pick a language which abstracts these error-cases better. Partial trees with unexpanded elements shouldn't result in a 2x lines of code blow-up because of passing errors around.
+    - think of exceptions, or Rust early-returns on errors/null.
+- Pick a language which allows you to parametrize types well. Defining types as objects as benefits of writing code around the type properties more easily,
+ but defining both a view and a type definition for each consensus type gets tedious.
+    - Python metaclasses solve this exact issue.
+    - Nim may be powerfull enough to do the same, or even better during compile time.
+    - Rust gets close enough with deriving types/properties from other types etc.
+    - Golang is just very, very, very verbose. Almost to a point where things get so repetitive that it is more likely to write bugs, instead of less likely. 
+- Start with `uint64`, `bytes32`, `Container` and `Vector`. This is what most of the Eth2 spec uses, and good for initial numbers.
+
+Some initial numbers on `pymerkles` and `ztyp`:
+
+Benchmark:
+- Pre: A validator registry filled with 100,000 validators.
+- Bench op: append a new validator, and run the hash-tree-root of the registry.
+    - the new validator is a new copy, not a reference to the same immutable validator.
+
+Golang with ztyp: `0.057` ms/op.
+Python with pymerkles: `0.125` ms/op.
+
+Note: with a new validator, and 41 hashes for the registry, that is about ~57 hashes, so Go matches roughly 1000 ns / hash. So that's ~2x overhead over the regular merkle hash speed, to navigate the tree and allocate new memory for the new validator on the heap, etc.
+And then Python is about 2x slower.
 

@@ -33,11 +33,8 @@ The difference here is that **it does not have to be "magic"**: we can implement
 
 The tree part structure is fairly simple:
 - `Node`: interface: a node in the binary merkle tree.
-    - `hash_tree_root()` to get the merkle root of this node. 
 - `Root`: a single `bytes32`, no child nodes.
-    - `hash_tree_root()` returns the node itself.
 - `Commit`: a pair of a left and right `Node`.
-    - `hash_tree_root()`, simply `H(left.hash_tree_root(), right.hash_tree_root())`. And cache the resulting root in the `Commit`, to never do the work over again.
 
 ### Merkleization "`hash_tree_root()`"
 

@@ -371,8 +371,8 @@ Benchmark:
     - the new validator is a new copy, not a reference to the same immutable validator.
 
 Golang with ztyp: `0.057` ms/op.
-Python with pymerkles: `0.125` ms/op.
+Python with pymerkles: `0.2` ms/op.
 
 Note: with a new validator, and 41 hashes for the registry, that is about ~57 hashes, so Go matches roughly 1000 ns / hash. So that's ~2x overhead over the regular merkle hash speed, to navigate the tree and allocate new memory for the new validator on the heap, etc.
-And then Python is about 2x slower.
+And then Python is about 4x slower (pymerkles in active dev, number is anywhere between `0.1 to 0.25` depending on features/optimizations balance).
 

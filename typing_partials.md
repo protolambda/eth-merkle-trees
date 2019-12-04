@@ -48,6 +48,7 @@ Notes:
 - `anchor = 1 << (gindex.bit_length() - 1)`: the generalized index, but with everything zeroed except the leading `1`.
 - `pivot = anchor >> 1`: the anchor of the left subtree.
 - `target ^ anchor | pivot`: very common operation, but note that it only changes the first two bits: it moves the leading bit one down, to navigate left or right subtree.
+- `target < target | pivot`: check if the target is in the left subtree
 
 Implementation:
 - `Root`: the node itself if `target == 1`, error otherwise.
@@ -56,8 +57,8 @@ Implementation:
     - `target == 1`: return self
     - `target == 2`: return left child
     - `target == 3`: return right child
-    - `target < pivot`: return `left.getter(target ^ anchor | pivot)`
-    - `target >= pivot`: return `right.getter(target ^ anchor | pivot)`
+    - `target < target | pivot`: return `left.getter(target ^ anchor | pivot)`
+    - `target >= target | pivot`: return `right.getter(target ^ anchor | pivot)`
 
 `target == 2, target == 3` are optional, but save a little bit of time.
 
@@ -87,8 +88,8 @@ Implementation:
      - `target == 1`: return `identity`
      - `target == 2`: return `rebind_left`
      - `target == 3`: return `rebind_right`
-     - `target < pivot`: return `compose(left.setter(target ^ anchor | pivot), rebind_left)`
-     - `target >= pivot`: return `compose(right.setter(target ^ anchor | pivot), rebind_right)`
+     - `target < target | pivot`: return `compose(left.setter(target ^ anchor | pivot), rebind_left)`
+     - `target >= target | pivot`: return `compose(right.setter(target ^ anchor | pivot), rebind_right)`
 
 Again, `target == 2, target == 3` are optional but save some time.
 

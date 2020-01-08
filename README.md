@@ -13,7 +13,7 @@ As part of the R&D for Eth 2.0 various ideas for merkle trees are documented/lin
  * [Turboproof Proof Backing](https://medium.com/@gballet/turboproofs-light-clients-and-saving-private-eth1-487aaa9b386)
  * [Tree-offset Proof Backing](./tree_offsets.md)
  * [Typing and Partials](./typing_partials.md)
-
+ * [Compact binary sparse merkle trees](./compact_sparse_merkle_tree.md)
 
 Thanks to Chainsafe for collecting many of these links, part of the [light client task-force merkleization call](https://github.com/ChainSafe/lodestar/issues/555)
 

@@ -19,7 +19,7 @@ However, we can **force** the long spine of branch nodes by mining a pair of nod
  
 ![](smt/spine_problem.png)
 
-Hashing the key helps to pick these for free, but mining a prefix is still possible (Bitcoin POW is based on this).
+Hashing the key helps to avoid an attacker from forcing it for free, but mining a prefix is still possible (Bitcoin POW is based on this).
 
 And this is birthday attackable: if you can any two keys with common prefixes of deep depth, it results in a very long branch.
 

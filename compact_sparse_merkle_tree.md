@@ -13,11 +13,11 @@ Now without diverging from it being a binary tree, we can compact the end, to do
 This requires mixing in the key, as we want the leaf to not be recognized as another key as well.
 And to mix in the key, we need to make sure the key does not appear as yet another branch node. This is done by mixing in zeroes, for which no preimage is known.
 
-### Spine problem
+### The arm problem
 
-However, we can **force** the long spine of branch nodes by mining a pair of nodes:
+However, we can **force** the long arm of zero branch nodes (as opposed to a spine which has ribs, i.e. non-zero branch nodes) by mining a pair of nodes:
  
-![](smt/spine_problem.png)
+![](smt/arm_problem.png)
 
 Hashing the key helps to avoid an attacker from forcing it for free, but mining a prefix is still possible (Bitcoin POW is based on this).
 

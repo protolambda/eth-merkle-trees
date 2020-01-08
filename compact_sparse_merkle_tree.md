@@ -90,6 +90,7 @@ So the question for sparse merkle trees as typed interpretation of binary trees 
 Personally I am in favor of 1, as it leafs unrelated subtrees intact, and is very easy to build and verify.
 However, it should only be used if a branch length of ~80 is not a breaking problem (say a bitcoin miner puts its hash to attack and mines prefixes leading up to your leaf node).
 It sounds like a big branch, but with ~85M accounts in the ethereum accounts tree, you already have `log2(85,000,000) = 26` guaranteed branch nodes.
-So a branch is only 3 times as long as the minimum, for an attack worth approx. the difficulty of 2 bitcoin blocks (`12.5 * 2 * 8000 = 200,000 USD` at the time of writing). So it does not seem like that much of a problem.
+So a branch is only 3 times as long as the minimum, for an attack worth approx. the difficulty of 2 bitcoin blocks (`12.5 * 2 * 8000 = 200,000 USD` at the time of writing).
+Of course you have more than 10 minutes to execute, but that doesn't reduce the energy cost. So it does not seem like that much of a problem.
 
   
